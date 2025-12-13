@@ -9,7 +9,7 @@ import { useStats } from "@/hooks/use-stats";
 import Link from "next/link";
 
 export default function HistoryPage() {
-  const { history, isLoading, error, refresh } = useStats();
+  const { history, isLoading, error, refresh, deleteMatch } = useStats();
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -81,7 +81,7 @@ export default function HistoryPage() {
                     visible: { opacity: 1, y: 0 },
                   }}
                 >
-                  <MatchHistoryItem match={match} />
+                  <MatchHistoryItem match={match} onDelete={deleteMatch} />
                 </motion.div>
               ))}
             </motion.div>

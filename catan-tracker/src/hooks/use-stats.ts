@@ -131,6 +131,47 @@ export function useStats() {
     loadStats();
   }, [loadStats]);
 
+  // Delete a match from history
+  const deleteMatch = useCallback(async (matchId: string) => {
+    if (!supabase) return false;
+
+    try {
+      // Delete match participants first (due to foreign key constraint)
+      const { error: participantsError } = await supabase
+        .from("match_participants")
+        .delete()
+        .eq("match_id", matchId);
+
+      if (participantsError) {
+        console.error("Error deleting participants:", participantsError);
+        return false;
+      }
+
+      // Delete the match
+      const { error: matchError } = await supabase
+        .from("matches")
+        .delete()
+        .eq("id", matchId);
+
+      if (matchError) {
+        console.error("Error deleting match:", matchError);
+        return false;
+      }
+
+      // Update local state
+      setHistory((prev) => prev.filter((m) => m.id !== matchId));
+      
+      // Refresh leaderboard since stats may have changed
+      const newLeaderboard = await fetchLeaderboard();
+      setLeaderboard(newLeaderboard);
+
+      return true;
+    } catch (err) {
+      console.error("Delete match error:", err);
+      return false;
+    }
+  }, [fetchLeaderboard]);
+
   return {
     leaderboard,
     history,
@@ -138,5 +179,6 @@ export function useStats() {
     error,
     refresh: loadStats,
     fetchActiveGames,
+    deleteMatch,
   };
 }

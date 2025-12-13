@@ -1,17 +1,34 @@
 "use client";
 
-import { Calendar, Trophy } from "lucide-react";
+import { useState } from "react";
+import { Calendar, Trophy, Trash2, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { generateAvatarUrl } from "@/lib/constants";
 import type { MatchWithDetails } from "@/types";
 
 interface MatchHistoryItemProps {
   match: MatchWithDetails;
+  onDelete?: (matchId: string) => Promise<boolean>;
 }
 
-export function MatchHistoryItem({ match }: MatchHistoryItemProps) {
+export function MatchHistoryItem({ match, onDelete }: MatchHistoryItemProps) {
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   const formattedDate = match.ended_at 
     ? new Date(match.ended_at).toLocaleDateString("en-US", {
         month: "short",
@@ -19,6 +36,17 @@ export function MatchHistoryItem({ match }: MatchHistoryItemProps) {
         year: "numeric",
       })
     : "In Progress";
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    setIsDeleting(true);
+    const success = await onDelete(match.id);
+    if (!success) {
+      setIsDeleting(false);
+      setIsDialogOpen(false);
+    }
+    // If successful, component will unmount so no need to update state
+  };
 
   const winner = match.participants.find(
     (p) => p.player_id === match.winner_id
@@ -39,9 +67,55 @@ export function MatchHistoryItem({ match }: MatchHistoryItemProps) {
             <Calendar className="w-4 h-4" />
             {formattedDate}
           </div>
-          <Badge variant="outline">
-            {expansionLabels[match.expansion] || match.expansion}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">
+              {expansionLabels[match.expansion] || match.expansion}
+            </Badge>
+            {onDelete && (
+              <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete this match?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently remove this match from your history.
+                      Player statistics will be updated accordingly. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDelete}
+                      disabled={isDeleting}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {isDeleting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Deleting...
+                        </>
+                      ) : (
+                        "Delete"
+                      )}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
         </div>
 
         {/* Winner */}
