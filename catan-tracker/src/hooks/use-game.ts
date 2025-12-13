@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { 
   Match, 
-  MatchParticipant, 
   MatchParticipantWithPlayer,
   CreateMatchInput,
-  ExpansionType 
 } from "@/types";
 
 interface GameState {
@@ -21,108 +19,135 @@ export function useGame(matchId?: string) {
   const [state, setState] = useState<GameState>({
     match: null,
     participants: [],
-    isLoading: true,
+    isLoading: !!matchId,
     error: null,
   });
+  
+  // Track if initial load is done
+  const initialLoadDone = useRef(false);
 
-  // Fetch game data
-  const fetchGame = useCallback(async (id: string) => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-
-    // Fetch match
-    const { data: matchData, error: matchError } = await supabase
-      .from("matches")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (matchError) {
-      setState((prev) => ({ 
-        ...prev, 
-        isLoading: false, 
-        error: matchError.message 
-      }));
+  // Fetch game data - showLoading controls whether to show loading spinner
+  const fetchGame = useCallback(async (id: string, showLoading = true) => {
+    if (!supabase) {
+      setState((prev) => ({ ...prev, isLoading: false, error: "Supabase not configured" }));
       return;
     }
 
-    // Fetch participants with player data
-    const { data: participantData, error: participantError } = await supabase
-      .from("match_participants")
-      .select("*, player:players(*)")
-      .eq("match_id", id)
-      .order("turn_order");
-
-    if (participantError) {
-      setState((prev) => ({ 
-        ...prev, 
-        isLoading: false, 
-        error: participantError.message 
-      }));
-      return;
+    // Only show loading on initial load, not on background syncs
+    if (showLoading && !initialLoadDone.current) {
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
     }
 
-    setState({
-      match: matchData,
-      participants: participantData || [],
-      isLoading: false,
-      error: null,
-    });
+    try {
+      // Fetch match
+      const { data: matchData, error: matchError } = await supabase
+        .from("matches")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (matchError) {
+        setState((prev) => ({ 
+          ...prev, 
+          isLoading: false, 
+          error: matchError.message 
+        }));
+        return;
+      }
+
+      // Fetch participants with player data
+      const { data: participantData, error: participantError } = await supabase
+        .from("match_participants")
+        .select(`
+          *,
+          player:players(*)
+        `)
+        .eq("match_id", id)
+        .order("turn_order");
+
+      if (participantError) {
+        setState((prev) => ({ 
+          ...prev, 
+          isLoading: false, 
+          error: participantError.message 
+        }));
+        return;
+      }
+
+      initialLoadDone.current = true;
+      
+      setState({
+        match: matchData,
+        participants: participantData || [],
+        isLoading: false,
+        error: null,
+      });
+    } catch (err) {
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: "Failed to fetch game data",
+      }));
+    }
   }, []);
 
   // Create a new game
   const createGame = async (input: CreateMatchInput): Promise<string | null> => {
-    // Create the match
-    const { data: matchData, error: matchError } = await supabase
-      .from("matches")
-      .insert({
-        expansion: input.expansion,
-        target_vp: input.target_vp,
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (matchError || !matchData) {
-      setState((prev) => ({ ...prev, error: matchError?.message || "Failed to create match" }));
+    if (!supabase) {
+      setState((prev) => ({ ...prev, error: "Supabase not configured" }));
       return null;
     }
 
-    // Create participants
-    const participants = input.player_ids.map((player_id, index) => ({
-      match_id: matchData.id,
-      player_id,
-      turn_order: index + 1,
-      score: 0,
-      has_longest_road: false,
-      has_largest_army: false,
-    }));
+    try {
+      // Create the match
+      const { data: matchData, error: matchError } = await supabase
+        .from("matches")
+        .insert({
+          expansion: input.expansion,
+          target_vp: input.target_vp,
+          is_active: true,
+        })
+        .select()
+        .single();
 
-    const { error: participantError } = await supabase
-      .from("match_participants")
-      .insert(participants);
+      if (matchError || !matchData) {
+        setState((prev) => ({ ...prev, error: matchError?.message || "Failed to create match" }));
+        return null;
+      }
 
-    if (participantError) {
-      // Rollback: delete the match
-      await supabase.from("matches").delete().eq("id", matchData.id);
-      setState((prev) => ({ ...prev, error: participantError.message }));
+      // Create participants
+      const participants = input.player_ids.map((player_id, index) => ({
+        match_id: matchData.id,
+        player_id,
+        turn_order: index + 1,
+        score: 0,
+        has_longest_road: false,
+        has_largest_army: false,
+      }));
+
+      const { error: participantError } = await supabase
+        .from("match_participants")
+        .insert(participants);
+
+      if (participantError) {
+        // Rollback: delete the match
+        await supabase.from("matches").delete().eq("id", matchData.id);
+        setState((prev) => ({ ...prev, error: participantError.message }));
+        return null;
+      }
+
+      return matchData.id;
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: "Failed to create game" }));
       return null;
     }
-
-    return matchData.id;
   };
 
-  // Update a participant's score
-  const updateScore = async (participantId: string, newScore: number) => {
-    const { error } = await supabase
-      .from("match_participants")
-      .update({ score: Math.max(0, newScore) })
-      .eq("id", participantId);
+  // Update a participant's score - fully optimistic, no blocking
+  const updateScore = useCallback((participantId: string, newScore: number) => {
+    if (!supabase) return;
 
-    if (error) {
-      setState((prev) => ({ ...prev, error: error.message }));
-      return false;
-    }
-
+    // Optimistic update - happens immediately, no await
     setState((prev) => ({
       ...prev,
       participants: prev.participants.map((p) =>
@@ -130,77 +155,93 @@ export function useGame(matchId?: string) {
       ),
     }));
 
-    return true;
-  };
+    // Fire and forget - update database in background
+    supabase
+      .from("match_participants")
+      .update({ score: Math.max(0, newScore) })
+      .eq("id", participantId)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Failed to sync score:", error);
+          // Could show a toast here, but don't block UI
+        }
+      });
+  }, []);
 
-  // Toggle special card (handles the "only one player can have it" logic)
-  const toggleSpecialCard = async (
+  // Toggle special card - fully optimistic
+  const toggleSpecialCard = useCallback((
     participantId: string,
     cardType: "has_longest_road" | "has_largest_army"
   ) => {
+    if (!supabase) return;
+
     const currentHolder = state.participants.find((p) => p[cardType]);
     const targetParticipant = state.participants.find((p) => p.id === participantId);
 
-    if (!targetParticipant) return false;
+    if (!targetParticipant) return;
 
-    // If already has it, remove it
-    if (targetParticipant[cardType]) {
-      const { error } = await supabase
-        .from("match_participants")
-        .update({ [cardType]: false })
-        .eq("id", participantId);
-
-      if (error) {
-        setState((prev) => ({ ...prev, error: error.message }));
-        return false;
-      }
-
-      setState((prev) => ({
-        ...prev,
-        participants: prev.participants.map((p) =>
-          p.id === participantId ? { ...p, [cardType]: false } : p
-        ),
-      }));
-      return true;
-    }
-
-    // Transfer from current holder to new player
-    if (currentHolder) {
-      const { error: removeError } = await supabase
-        .from("match_participants")
-        .update({ [cardType]: false })
-        .eq("id", currentHolder.id);
-
-      if (removeError) {
-        setState((prev) => ({ ...prev, error: removeError.message }));
-        return false;
-      }
-    }
-
-    const { error: addError } = await supabase
-      .from("match_participants")
-      .update({ [cardType]: true })
-      .eq("id", participantId);
-
-    if (addError) {
-      setState((prev) => ({ ...prev, error: addError.message }));
-      return false;
-    }
-
+    // Optimistic update - happens immediately
     setState((prev) => ({
       ...prev,
-      participants: prev.participants.map((p) => ({
-        ...p,
-        [cardType]: p.id === participantId,
-      })),
+      participants: prev.participants.map((p) => {
+        if (p.id === participantId) {
+          return { ...p, [cardType]: !p[cardType] };
+        }
+        // Remove from current holder if giving to new player
+        if (currentHolder && p.id === currentHolder.id && !targetParticipant[cardType]) {
+          return { ...p, [cardType]: false };
+        }
+        return p;
+      }),
     }));
 
-    return true;
-  };
+    // Fire and forget - update database in background
+    const updateDatabase = async () => {
+      try {
+        if (targetParticipant[cardType]) {
+          // Remove from target
+          await supabase
+            .from("match_participants")
+            .update({ [cardType]: false })
+            .eq("id", participantId);
+        } else {
+          // Remove from current holder first
+          if (currentHolder && currentHolder.id !== participantId) {
+            await supabase
+              .from("match_participants")
+              .update({ [cardType]: false })
+              .eq("id", currentHolder.id);
+          }
+          // Add to target
+          await supabase
+            .from("match_participants")
+            .update({ [cardType]: true })
+            .eq("id", participantId);
+        }
+      } catch (err) {
+        console.error("Failed to sync special card:", err);
+      }
+    };
+
+    updateDatabase();
+  }, [state.participants]);
 
   // End the game
   const endGame = async (winnerId: string) => {
-    if (!state.match) return false;
+    if (!supabase || !state.match) return false;
+
+    // Optimistic update
+    setState((prev) => ({
+      ...prev,
+      match: prev.match
+        ? {
+            ...prev.match,
+            is_active: false,
+            ended_at: new Date().toISOString(),
+            winner_id: winnerId,
+          }
+        : null,
+    }));
 
     const { error } = await supabase
       .from("matches")
@@ -216,33 +257,20 @@ export function useGame(matchId?: string) {
       return false;
     }
 
-    setState((prev) => ({
-      ...prev,
-      match: prev.match
-        ? {
-            ...prev.match,
-            is_active: false,
-            ended_at: new Date().toISOString(),
-            winner_id: winnerId,
-          }
-        : null,
-    }));
-
     return true;
   };
 
   // Load game on mount if matchId is provided
   useEffect(() => {
     if (matchId) {
-      fetchGame(matchId);
-    } else {
-      setState((prev) => ({ ...prev, isLoading: false }));
+      initialLoadDone.current = false;
+      fetchGame(matchId, true);
     }
   }, [matchId, fetchGame]);
 
-  // Set up realtime subscription for live updates
+  // Set up realtime subscription for live updates from OTHER clients
   useEffect(() => {
-    if (!matchId) return;
+    if (!matchId || !supabase) return;
 
     const channel = supabase
       .channel(`match-${matchId}`)
@@ -255,8 +283,8 @@ export function useGame(matchId?: string) {
           filter: `match_id=eq.${matchId}`,
         },
         () => {
-          // Refetch on any change
-          fetchGame(matchId);
+          // Background sync - don't show loading spinner
+          fetchGame(matchId, false);
         }
       )
       .subscribe();
@@ -272,7 +300,6 @@ export function useGame(matchId?: string) {
     updateScore,
     toggleSpecialCard,
     endGame,
-    refetch: matchId ? () => fetchGame(matchId) : undefined,
+    refetch: matchId ? () => fetchGame(matchId, false) : undefined,
   };
 }
-

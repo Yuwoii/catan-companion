@@ -180,9 +180,16 @@
     @apply border-border outline-ring/50;
   }
   
+  /* Prevent double-tap zoom on mobile */
+  html {
+    touch-action: manipulation;
+  }
+  
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Prevent pull-to-refresh */
+    overscroll-behavior: none;
   }
   
   /* Serif display headings for Catan theme */
