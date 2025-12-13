@@ -1,1 +1,1 @@
-# catan-scoreboard
+# catan-tracker
