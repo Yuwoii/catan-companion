@@ -217,16 +217,16 @@ export default function Home() {
               return (
                 <motion.div key={game.id} variants={item}>
                   <Link href={`/game/${game.id}`}>
-                    <Card className="border-2 border-accent bg-card shadow-md hover:shadow-lg transition-all cursor-pointer relative overflow-hidden">
+                    <Card className="border-2 border-accent bg-card text-card-foreground shadow-md hover:shadow-lg transition-all cursor-pointer relative overflow-hidden">
                       {/* Accent stripe */}
                       <div className="absolute inset-y-0 left-0 w-1.5 bg-accent" />
                       <CardContent className="p-4 pl-5">
                         <div className="flex items-center justify-between mb-3">
-                          <Badge className="bg-accent text-white gap-1 shadow-sm">
+                          <Badge className="bg-accent gap-1 shadow-sm" style={{ color: '#ffffff' }}>
                             <Play className="w-3 h-3" />
                             Resume Game
                           </Badge>
-                          <span className="text-2xl">{expansionInfo?.icon}</span>
+                          <span className="text-2xl text-foreground">{expansionInfo?.icon}</span>
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
@@ -247,7 +247,7 @@ export default function Home() {
                                 </div>
                               ))}
                               {game.participants.length > 4 && (
-                                <div className="w-8 h-8 rounded-full border-2 border-card bg-muted flex items-center justify-center text-xs font-medium">
+                                <div className="w-8 h-8 rounded-full border-2 border-card bg-muted flex items-center justify-center text-xs font-medium text-foreground">
                                   +{game.participants.length - 4}
                                 </div>
                               )}
@@ -256,10 +256,10 @@ export default function Home() {
                               {game.participants.length} players
                             </span>
                           </div>
-                          <div className="text-right text-sm text-muted-foreground">
-                            <span className="font-mono">{game.target_vp} VP</span>
-                            <span className="mx-1">•</span>
-                            <span>{elapsedMinutes}m ago</span>
+                          <div className="text-right text-sm">
+                            <span className="font-mono text-foreground">{game.target_vp} VP</span>
+                            <span className="mx-1 text-muted-foreground">•</span>
+                            <span className="text-muted-foreground">{elapsedMinutes}m ago</span>
                           </div>
                         </div>
                       </CardContent>
