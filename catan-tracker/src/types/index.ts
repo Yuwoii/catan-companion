@@ -36,6 +36,14 @@ export interface MatchParticipant {
   has_longest_road: boolean;
   has_largest_army: boolean;
   turn_order: number;
+  // Cities & Knights fields
+  trade_level: number;
+  politics_level: number;
+  science_level: number;
+  has_trade_metropolis: boolean;
+  has_politics_metropolis: boolean;
+  has_science_metropolis: boolean;
+  has_defender: boolean;
 }
 
 // ============================================

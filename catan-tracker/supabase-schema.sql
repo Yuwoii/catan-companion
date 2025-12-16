@@ -61,6 +61,19 @@ CREATE TABLE IF NOT EXISTS match_participants (
   has_largest_army BOOLEAN NOT NULL DEFAULT FALSE,
   turn_order INTEGER NOT NULL CHECK (turn_order >= 1 AND turn_order <= 6),
   
+  -- Cities & Knights: City Improvement Levels (0-5)
+  trade_level INTEGER NOT NULL DEFAULT 0 CHECK (trade_level >= 0 AND trade_level <= 5),
+  politics_level INTEGER NOT NULL DEFAULT 0 CHECK (politics_level >= 0 AND politics_level <= 5),
+  science_level INTEGER NOT NULL DEFAULT 0 CHECK (science_level >= 0 AND science_level <= 5),
+  
+  -- Cities & Knights: Metropolis Awards (2 VP each, only one player can hold each)
+  has_trade_metropolis BOOLEAN NOT NULL DEFAULT FALSE,
+  has_politics_metropolis BOOLEAN NOT NULL DEFAULT FALSE,
+  has_science_metropolis BOOLEAN NOT NULL DEFAULT FALSE,
+  
+  -- Cities & Knights: Defender of Catan (replaces Largest Army in C&K)
+  has_defender BOOLEAN NOT NULL DEFAULT FALSE,
+  
   UNIQUE(match_id, player_id),
   UNIQUE(match_id, turn_order)
 );
@@ -80,6 +93,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_one_longest_road
 CREATE UNIQUE INDEX IF NOT EXISTS idx_one_largest_army 
   ON match_participants(match_id) 
   WHERE has_largest_army = TRUE;
+
+-- Cities & Knights: Only one player can hold each metropolis per match
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_trade_metropolis 
+  ON match_participants(match_id) 
+  WHERE has_trade_metropolis = TRUE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_politics_metropolis 
+  ON match_participants(match_id) 
+  WHERE has_politics_metropolis = TRUE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_science_metropolis 
+  ON match_participants(match_id) 
+  WHERE has_science_metropolis = TRUE;
+
+-- Cities & Knights: Only one player can hold Defender of Catan per match
+CREATE UNIQUE INDEX IF NOT EXISTS idx_one_defender 
+  ON match_participants(match_id) 
+  WHERE has_defender = TRUE;
 
 -- ============================================
 -- PLAYER STATS VIEW

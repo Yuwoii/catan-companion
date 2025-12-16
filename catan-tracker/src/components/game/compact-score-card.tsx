@@ -1,9 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Minus, Plus, Route, Swords } from "lucide-react";
+import { Route, Swords, Shield, Building2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { generateAvatarUrl } from "@/lib/constants";
 import type { MatchParticipant, Player } from "@/types";
 
@@ -12,9 +10,9 @@ interface CompactScoreCardProps {
   participant: MatchParticipant;
   targetVP: number;
   rank: number;
-  onScoreChange: (delta: number) => void;
-  onToggleLongestRoad: () => void;
-  onToggleLargestArmy: () => void;
+  isSelected: boolean;
+  onClick: () => void;
+  isCitiesKnights?: boolean;
 }
 
 export function CompactScoreCard({
@@ -22,9 +20,9 @@ export function CompactScoreCard({
   participant,
   targetVP,
   rank,
-  onScoreChange,
-  onToggleLongestRoad,
-  onToggleLargestArmy,
+  isSelected,
+  onClick,
+  isCitiesKnights = false,
 }: CompactScoreCardProps) {
   const initials = player.name
     .split(" ")
@@ -40,32 +38,42 @@ export function CompactScoreCard({
   const totalScore = 
     participant.score + 
     (participant.has_longest_road ? 2 : 0) + 
-    (participant.has_largest_army ? 2 : 0);
+    (isCitiesKnights ? (participant.has_defender ? 2 : 0) : (participant.has_largest_army ? 2 : 0)) +
+    (participant.has_trade_metropolis ? 2 : 0) +
+    (participant.has_politics_metropolis ? 2 : 0) +
+    (participant.has_science_metropolis ? 2 : 0);
 
   const isWinning = totalScore >= targetVP;
   const isLeading = rank === 1 && totalScore > 0;
 
+  const metropolisCount = 
+    (participant.has_trade_metropolis ? 1 : 0) +
+    (participant.has_politics_metropolis ? 1 : 0) +
+    (participant.has_science_metropolis ? 1 : 0);
+
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className={`relative rounded-xl border bg-card p-2 transition-all ${
-        isWinning 
-          ? "ring-2 ring-accent shadow-lg winner-glow" 
-          : isLeading 
-            ? "ring-1 ring-primary/50" 
-            : ""
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`relative rounded-xl bg-card p-1.5 cursor-pointer text-left w-full h-full flex flex-col overflow-hidden ${
+        isSelected
+          ? "border-4 border-primary"
+          : isWinning 
+            ? "border-2 border-accent" 
+            : isLeading 
+              ? "border-2 border-primary/50" 
+              : "border border-border"
       }`}
-      style={{ borderColor: `${player.preferred_color}40` }}
     >
-      {/* Header: Avatar + Name + Score */}
-      <div className="flex items-center gap-2 mb-2">
+      {/* Player Info Row */}
+      <div className="flex items-center gap-2">
         <div 
           className="relative shrink-0 clip-hexagon-rounded"
           style={{ 
-            width: 36, 
-            height: 36, 
+            width: 32, 
+            height: 32, 
             backgroundColor: player.preferred_color,
             padding: 2,
           }}
@@ -81,86 +89,88 @@ export function CompactScoreCard({
           </Avatar>
         </div>
 
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm truncate leading-tight">{player.name}</p>
-          <div className="flex gap-1">
-            {participant.has_longest_road && (
-              <span className="text-xs">🛣️</span>
-            )}
-            {participant.has_largest_army && (
-              <span className="text-xs">⚔️</span>
-            )}
-          </div>
-        </div>
+        <p className="font-bold text-base truncate leading-tight flex-1">{player.name}</p>
+      </div>
 
-        <motion.div
-          key={totalScore}
-          initial={{ scale: 1.3 }}
-          animate={{ scale: 1 }}
-          transition={{ type: "spring", stiffness: 500, damping: 15 }}
-          className="text-2xl font-bold font-mono tabular-nums"
+      {/* Giant Score */}
+      <div className="flex-1 flex items-center justify-center min-h-0">
+        <div
+          className="text-4xl sm:text-5xl font-black font-mono tabular-nums leading-none"
           style={{ color: player.preferred_color }}
         >
           {totalScore}
-        </motion.div>
-      </div>
-
-      {/* Score Controls Row */}
-      <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-10 w-10 rounded-lg shrink-0"
-          onClick={() => onScoreChange(-1)}
-          disabled={participant.score <= 0}
-        >
-          <Minus className="h-5 w-5" />
-        </Button>
-
-        <div className="flex-1 text-center">
-          <span className="text-lg font-semibold font-mono">{participant.score}</span>
-          <span className="text-xs text-muted-foreground ml-1">base</span>
         </div>
-
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-10 w-10 rounded-lg shrink-0"
-          onClick={() => onScoreChange(1)}
-        >
-          <Plus className="h-5 w-5" />
-        </Button>
       </div>
 
-      {/* Special Cards Row */}
-      <div className="flex gap-1 mt-2">
-        <button
-          onClick={onToggleLongestRoad}
-          className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium transition-all ${
+      {/* City Levels for C&K - Larger with colored backgrounds */}
+      {isCitiesKnights && (
+        <div className="flex justify-center gap-1 mb-1">
+          <span className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 px-1.5 rounded text-sm font-bold">
+            T:{participant.trade_level ?? 0}
+          </span>
+          <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-1.5 rounded text-sm font-bold">
+            P:{participant.politics_level ?? 0}
+          </span>
+          <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-1.5 rounded text-sm font-bold">
+            S:{participant.science_level ?? 0}
+          </span>
+        </div>
+      )}
+
+      {/* Special Card Badges - Icon only, larger */}
+      <div className="flex justify-center gap-1.5 mt-auto">
+        {/* Longest Road */}
+        <div 
+          className={`flex items-center justify-center w-7 h-7 rounded-full ${
             participant.has_longest_road
               ? "bg-catan-wood text-white"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted"
+              : "bg-muted/30 text-muted-foreground/50"
           }`}
         >
-          <Route className="w-3 h-3" />
-          <span>Road</span>
-          {participant.has_longest_road && <span className="opacity-75">+2</span>}
-        </button>
+          <Route className="w-4 h-4" />
+        </div>
 
-        <button
-          onClick={onToggleLargestArmy}
-          className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs font-medium transition-all ${
-            participant.has_largest_army
-              ? "bg-catan-ore text-white"
-              : "bg-muted/50 text-muted-foreground hover:bg-muted"
-          }`}
-        >
-          <Swords className="w-3 h-3" />
-          <span>Army</span>
-          {participant.has_largest_army && <span className="opacity-75">+2</span>}
-        </button>
+        {/* Army or Defender */}
+        {isCitiesKnights ? (
+          <div 
+            className={`flex items-center justify-center w-7 h-7 rounded-full ${
+              participant.has_defender
+                ? "bg-catan-ore text-white"
+                : "bg-muted/30 text-muted-foreground/50"
+            }`}
+          >
+            <Shield className="w-4 h-4" />
+          </div>
+        ) : (
+          <div 
+            className={`flex items-center justify-center w-7 h-7 rounded-full ${
+              participant.has_largest_army
+                ? "bg-catan-ore text-white"
+                : "bg-muted/30 text-muted-foreground/50"
+            }`}
+          >
+            <Swords className="w-4 h-4" />
+          </div>
+        )}
+
+        {/* Metropolis - with count badge */}
+        {isCitiesKnights && (
+          <div 
+            className={`relative flex items-center justify-center w-7 h-7 rounded-full ${
+              metropolisCount > 0
+                ? "bg-amber-500 text-white"
+                : "bg-muted/30 text-muted-foreground/50"
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            {metropolisCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 bg-white text-amber-600 text-[10px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center border border-amber-500">
+                {metropolisCount}
+              </span>
+            )}
+          </div>
+        )}
       </div>
-    </motion.div>
+    </button>
   );
 }
-

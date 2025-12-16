@@ -226,6 +226,141 @@ export function useGame(matchId?: string) {
     updateDatabase();
   }, [state.participants]);
 
+  // Update city improvement level (Cities & Knights) - fully optimistic
+  const updateCityImprovement = useCallback((
+    participantId: string,
+    type: "trade_level" | "politics_level" | "science_level",
+    newLevel: number
+  ) => {
+    if (!supabase) return;
+
+    const clampedLevel = Math.max(0, Math.min(5, newLevel));
+
+    // Optimistic update
+    setState((prev) => ({
+      ...prev,
+      participants: prev.participants.map((p) =>
+        p.id === participantId ? { ...p, [type]: clampedLevel } : p
+      ),
+    }));
+
+    // Fire and forget
+    supabase
+      .from("match_participants")
+      .update({ [type]: clampedLevel })
+      .eq("id", participantId)
+      .then(({ error }) => {
+        if (error) {
+          console.error("Failed to sync city improvement:", error);
+        }
+      });
+  }, []);
+
+  // Toggle metropolis (Cities & Knights) - fully optimistic
+  const toggleMetropolis = useCallback((
+    participantId: string,
+    type: "has_trade_metropolis" | "has_politics_metropolis" | "has_science_metropolis"
+  ) => {
+    if (!supabase) return;
+
+    const currentHolder = state.participants.find((p) => p[type]);
+    const targetParticipant = state.participants.find((p) => p.id === participantId);
+
+    if (!targetParticipant) return;
+
+    // Optimistic update
+    setState((prev) => ({
+      ...prev,
+      participants: prev.participants.map((p) => {
+        if (p.id === participantId) {
+          return { ...p, [type]: !p[type] };
+        }
+        if (currentHolder && p.id === currentHolder.id && !targetParticipant[type]) {
+          return { ...p, [type]: false };
+        }
+        return p;
+      }),
+    }));
+
+    // Fire and forget
+    const updateDatabase = async () => {
+      try {
+        if (targetParticipant[type]) {
+          await supabase
+            .from("match_participants")
+            .update({ [type]: false })
+            .eq("id", participantId);
+        } else {
+          if (currentHolder && currentHolder.id !== participantId) {
+            await supabase
+              .from("match_participants")
+              .update({ [type]: false })
+              .eq("id", currentHolder.id);
+          }
+          await supabase
+            .from("match_participants")
+            .update({ [type]: true })
+            .eq("id", participantId);
+        }
+      } catch (err) {
+        console.error("Failed to sync metropolis:", err);
+      }
+    };
+
+    updateDatabase();
+  }, [state.participants]);
+
+  // Toggle Defender of Catan (Cities & Knights) - fully optimistic
+  const toggleDefender = useCallback((participantId: string) => {
+    if (!supabase) return;
+
+    const currentHolder = state.participants.find((p) => p.has_defender);
+    const targetParticipant = state.participants.find((p) => p.id === participantId);
+
+    if (!targetParticipant) return;
+
+    // Optimistic update
+    setState((prev) => ({
+      ...prev,
+      participants: prev.participants.map((p) => {
+        if (p.id === participantId) {
+          return { ...p, has_defender: !p.has_defender };
+        }
+        if (currentHolder && p.id === currentHolder.id && !targetParticipant.has_defender) {
+          return { ...p, has_defender: false };
+        }
+        return p;
+      }),
+    }));
+
+    // Fire and forget
+    const updateDatabase = async () => {
+      try {
+        if (targetParticipant.has_defender) {
+          await supabase
+            .from("match_participants")
+            .update({ has_defender: false })
+            .eq("id", participantId);
+        } else {
+          if (currentHolder && currentHolder.id !== participantId) {
+            await supabase
+              .from("match_participants")
+              .update({ has_defender: false })
+              .eq("id", currentHolder.id);
+          }
+          await supabase
+            .from("match_participants")
+            .update({ has_defender: true })
+            .eq("id", participantId);
+        }
+      } catch (err) {
+        console.error("Failed to sync defender:", err);
+      }
+    };
+
+    updateDatabase();
+  }, [state.participants]);
+
   // End the game
   const endGame = async (winnerId: string) => {
     if (!supabase || !state.match) return false;
@@ -299,6 +434,9 @@ export function useGame(matchId?: string) {
     createGame,
     updateScore,
     toggleSpecialCard,
+    updateCityImprovement,
+    toggleMetropolis,
+    toggleDefender,
     endGame,
     refetch: matchId ? () => fetchGame(matchId, false) : undefined,
   };
